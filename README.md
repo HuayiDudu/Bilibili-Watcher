@@ -2,6 +2,9 @@
 
 按固定周期采样 B 站视频的公开数据，把零散的数字连成一条可回看的曲线，停止时归档为 JSON 报告。
 
+> **分支说明**
+> `main` 只含运行代码与使用说明；`dev` 含完整内容（代码 + 测试 + 架构文档）。需要跑测试或查看设计文档时使用 `dev`。
+
 ![报告详情](preview.png)
 
 ## 它解决什么问题
@@ -161,26 +164,18 @@ web/
   report-page.js      报告页：列表、详情图表、导出
   chart.js            自绘折线图
   filepicker.js       统一的文件/目录选择器
-tests/                后端测试
-web/tests/            图表测试
-docs/                 架构说明与图表
 ```
 
 ## 测试
 
+测试位于 `dev` 分支：
+
 ```bash
+git checkout dev
 test.bat
 ```
 
-- 后端：Python 标准库 `unittest`，233 项，覆盖采集、会话、报告、配置、HTTP 与安全边界
-- 前端：Node 内置 `node:test`，18 项，覆盖刻度计算、数值格式化、坐标映射
-
-未安装 Node 时只跑后端。也可以分开执行：
-
-```bash
-python -m unittest discover -s tests -t .
-node --test "web/tests/*.test.js"
-```
+后端 Python 标准库 `unittest` 233 项，前端 `node:test` 18 项。
 
 ## 运行期文件
 
