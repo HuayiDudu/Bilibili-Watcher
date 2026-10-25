@@ -1,0 +1,52 @@
+@startuml 分层架构
+skinparam componentStyle rectangle
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Microsoft YaHei"
+skinparam packageStyle rectangle
+left to right direction
+
+package "浏览器 web/" {
+  [index.html + style.css\n页面结构] as VIEW
+  [app.js\n状态机与交互] as UI
+  [chart.js\n自绘折线图] as CHART
+}
+
+package "接口层" {
+  [server.py\nHTTP 路由 / 参数解析 / 错误映射] as SRV
+}
+
+package "编排层" {
+  [control.py\n多监控集合、报告、设置] as CTRL
+}
+
+package "领域层" {
+  [session.py\n单监控会话 + 采样线程] as SESS
+  [schedule.py\n整点对齐计算] as SCHED
+  [report.py\n报告文档与落盘] as REP
+}
+
+package "基础设施层" {
+  [collector.py\nB站接口 / 限流冷却] as CLI
+  [settings.py\n配置持久化] as SET
+  [dialogs.py\n原生目录选择] as DLG
+}
+
+cloud "B站 API" as BILI
+
+VIEW --> UI
+UI --> CHART : 绘制
+UI --> SRV : /api/*
+SRV --> CTRL
+SRV --> DLG : 选择目录
+CTRL --> SESS : 每个监控一个实例
+CTRL --> REP : 停止时生成
+CTRL --> SET
+SESS --> CLI : 共享同一客户端
+SESS --> SCHED
+CLI --> BILI : view / online
+
+note bottom of CLI
+  所有监控共享一个 BiliClient，
+  限流冷却因此是全局的
+end note
+@enduml

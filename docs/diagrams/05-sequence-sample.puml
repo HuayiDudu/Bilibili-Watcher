@@ -1,0 +1,42 @@
+@startuml 采样一轮
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Microsoft YaHei"
+skinparam sequenceMessageAlign left
+autonumber
+
+participant "采样线程" as T
+participant "session.py" as SESS
+participant "collector.py" as CLI
+database "B站 API" as BILI
+
+T -> T : 等待至 _next_due
+T -> T : scheduled_ms = 计划时刻对应的时间戳
+T -> SESS : _sample_once(scheduled_ms)
+
+SESS -> CLI : cooldown_remaining()
+alt 处于限流冷却期
+  SESS -> SESS : 只记录 last_error\n不发请求、不计失败
+else 可正常请求
+  SESS -> CLI : fetch_snapshot(ref)
+  CLI -> BILI : GET view
+  CLI -> BILI : GET online（失败留空，不重试）
+  alt 成功
+    CLI --> SESS : (info, metrics)
+    SESS -> SESS : 追加样本（用 scheduled_ms 打戳）\nsuccess_count + 1
+  else CollectError
+    CLI --> SESS : 异常
+    SESS -> SESS : failure_count + 1\n记录 last_error
+  end
+end
+
+SESS -> SESS : _next_due += interval\n（绝对时间轴，不随请求耗时漂移）
+opt 落后超过一个周期
+  SESS -> SESS : 跳过错过的时隙，不补采
+end
+
+note over SESS
+  用计划时刻而非请求完成时刻打戳，
+  否则每个点都会晚 200–300ms，
+  整点对齐会失真
+end note
+@enduml

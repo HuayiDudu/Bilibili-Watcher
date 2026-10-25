@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>B站视频监控工具</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <h1>B站视频监控工具</h1>
+    </div>
+    <button type="button" class="monitor-toggle" id="monitorToggle" aria-expanded="false">
+      监控列表
+      <span class="monitor-count" id="monitorCount">0</span>
+    </button>
+    <nav class="nav" id="mainNav">
+      <button type="button" class="nav-item is-active" data-page="monitor">监控数据</button>
+      <button type="button" class="nav-item" data-page="report">查看报告</button>
+    </nav>
+  </div>
+
+  <div class="monitor-pop" id="monitorPop" hidden>
+    <div class="monitor-pop-head">
+      <h3>监控列表</h3>
+      <span class="monitor-pop-count" id="listCount">0/5</span>
+    </div>
+    <ul class="video-list" id="videoList"></ul>
+    <p class="list-empty" id="listEmpty" hidden>列表为空，点击下方按钮新建</p>
+    <button type="button" class="btn btn-primary btn-sm list-create" id="createBtn">＋ 新建监控</button>
+  </div>
+</header>
+
+<main class="layout" id="monitorView">
+
+  <div class="main-column">
+
+    <section class="panel panel-config">
+      <div class="panel-head">
+        <h2>监控设置</h2>
+        <span class="panel-hint">支持视频链接、BV 号、av 号与 b23.tv 短链</span>
+      </div>
+
+      <form id="configForm" class="config-form">
+        <label class="field">
+          <span class="field-label">视频链接 / BV 号</span>
+          <input id="sourceInput" class="input" type="text" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="field field-small">
+          <span class="field-label">
+            采样周期（秒）
+            <button type="button" class="help-dot" id="intervalHelp" aria-label="采样周期下限说明">!</button>
+          </span>
+          <input id="intervalInput" class="input" type="number" min="5" max="3600" step="1" value="30" />
+          <span class="help-tip" id="intervalTip" hidden>
+            采样间隔不能低于 5 秒。B站 接口对高频请求会触发风控并返回 412 错误，
+            且播放量等数据本身按分钟级批量更新，采得更密也只会拿到重复值。
+          </span>
+        </label>
+        <div class="config-actions">
+          <button type="submit" id="startBtn" class="btn btn-primary">开始监控</button>
+          <button type="button" id="stopBtn" class="btn btn-danger" disabled>停止</button>
+        </div>
+      </form>
+
+      <article id="videoCard" class="video-card" hidden>
+        <img id="videoCover" class="video-cover" alt="" referrerpolicy="no-referrer" />
+        <div class="video-body">
+          <a id="videoTitle" class="video-title" href="#" target="_blank" rel="noreferrer">—</a>
+          <div class="video-meta" id="videoMeta"></div>
+        </div>
+      </article>
+
+      <div class="report-save">
+        <label class="checkbox">
+          <input type="checkbox" id="autoSaveToggle" />
+          <span>自动保存 JSON 至指定目录</span>
+        </label>
+        <span class="report-path" id="autoSaveDir">未设置目录</span>
+        <button type="button" class="btn btn-ghost btn-sm" id="pickDirBtn">选择目录</button>
+        <label class="checkbox">
+          <input type="checkbox" id="alignClockToggle" />
+          <span>整点采样</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="panel chart-panel">
+      <div class="panel-head chart-head">
+        <div class="tabs" id="metricTabs"></div>
+        <div class="tabs tabs-range" id="rangeTabs"></div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="mainChart"></canvas>
+      </div>
+      <div class="chart-foot">
+        <p class="chart-note" id="chartNote" hidden></p>
+      </div>
+    </section>
+
+  </div>
+
+  <section class="panel status-panel">
+    <div class="status-head">
+      <span class="status-dot" id="statusDot"></span>
+      <span class="status-text" id="statusText">尚未开始监控</span>
+    </div>
+    <dl class="status-meta">
+      <div><dt>采样周期</dt><dd id="metaInterval">—</dd></div>
+      <div><dt>采样点</dt><dd id="metaSamples">0</dd></div>
+      <div><dt>最新采样</dt><dd id="metaLatest">—</dd></div>
+      <div><dt>已运行</dt><dd id="metaUptime">—</dd></div>
+      <div><dt>失败次数</dt><dd id="metaFailures">0</dd></div>
+    </dl>
+  </section>
+
+  <section class="panel metrics-panel">
+    <div class="panel-head">
+      <h2>实时指标</h2>
+    </div>
+    <ul class="metric-list" id="metricList"></ul>
+  </section>
+
+  <section class="panel report-panel" id="reportPanel" hidden>
+    <div class="panel-head">
+      <h2>监控报告</h2>
+      <span class="panel-hint" id="reportHint">报告保存在本次会话内，可随时下载</span>
+    </div>
+
+    <div class="report-grid">
+      <dl class="report-item is-wide"><dt>报告文件</dt><dd id="reportName">—</dd></dl>
+      <dl class="report-item"><dt>采样点</dt><dd id="reportSamples">—</dd></dl>
+      <dl class="report-item"><dt>监控时长</dt><dd id="reportDuration">—</dd></dl>
+      <dl class="report-item"><dt>生成时间</dt><dd id="reportTime">—</dd></dl>
+    </div>
+
+    <div class="report-actions">
+      <a class="btn-link" id="downloadLink" href="/api/report">下载 JSON 报告</a>
+      <span class="report-path" id="reportSavedPath"></span>
+    </div>
+  </section>
+
+</main>
+
+<section class="report-view" id="reportView" hidden>
+
+  <div class="report-bar">
+    <button type="button" class="btn btn-primary" id="importBtn">导入报告</button>
+    <p class="report-summary" id="reportSummary">已保存 0 份报告 · 0 份未保存</p>
+    <div class="report-bar-right">
+      <button type="button" class="btn btn-ghost" id="exportSelectedBtn" disabled>导出报告</button>
+      <div class="gear-wrap">
+        <button type="button" class="gear-btn" id="gearBtn" aria-label="导出设置" aria-expanded="false">
+          <svg class="gear-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3.4"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"></path>
+          </svg>
+        </button>
+        <div class="gear-pop" id="gearPop" hidden>
+          <button type="button" class="gear-item" id="pickExportDirBtn">选择导出目录</button>
+          <button type="button" class="gear-item" id="exportAllBtn">全部导出</button>
+          <button type="button" class="gear-item" id="manageImportDirsBtn">报告自动导入目录</button>
+          <p class="gear-dir" id="gearDirHint">未设置，导出时走浏览器下载</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-list-view" id="reportListView">
+    <div class="report-filters">
+      <select class="select-inline" id="filterSource">
+        <option value="all">全部来源</option>
+        <option value="live">未保存</option>
+        <option value="saved">已保存</option>
+      </select>
+      <input type="search" class="filter-input" id="filterKeyword" placeholder="搜索标题或 BV 号">
+      <button type="button" class="btn btn-ghost btn-sm" id="saveLiveBtn" title="把会话中尚未保存的报告写入仓库目录">一键保存</button>
+      <label class="filter-pagesize">每页
+        <select class="select-inline" id="pageSize">
+          <option value="10">10</option>
+          <option value="20" selected>20</option>
+          <option value="50">50</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="report-table-wrap">
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th class="col-title">标题
+              <button type="button" class="sort-btn" data-key="title" title="点击按此列升序">↑↓</button>
+            </th>
+            <th class="col-owner">UP主</th>
+            <th class="col-bvid">BV号</th>
+            <th class="col-time">发布时间
+              <button type="button" class="sort-btn" data-key="pubdate" title="点击按此列升序">↑↓</button>
+            </th>
+            <th class="col-time">报告生成时间
+              <button type="button" class="sort-btn" data-key="generated_at" title="点击按此列升序">↑↓</button>
+            </th>
+            <th class="col-num">监控时长</th>
+            <th class="col-check">
+              <label class="check-head">
+                <input type="checkbox" id="selectAll" aria-label="全选">
+                <span>全选</span>
+              </label>
+            </th>
+          </tr>
+        </thead>
+        <tbody id="reportTbody"></tbody>
+      </table>
+    </div>
+
+    <div class="report-pager">
+      <span class="pager-info" id="pageInfo"></span>
+      <div class="pager-buttons">
+        <button type="button" class="btn btn-ghost btn-sm" id="prevPageBtn">上一页</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="nextPageBtn">下一页</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-detail-view" id="reportDetailView" hidden>
+    <div class="detail-bar">
+      <button type="button" class="btn btn-ghost btn-sm" id="backToListBtn">← 返回列表</button>
+      <span class="detail-hint" id="detailHint"></span>
+    </div>
+
+    <div class="report-head">
+      <img class="report-cover" id="reportCover" alt="" referrerpolicy="no-referrer">
+      <div class="report-head-body">
+        <h2 id="reportTitle"></h2>
+        <p class="report-sub" id="reportSub"></p>
+      </div>
+    </div>
+
+    <div class="report-toolbar">
+      <div class="metric-tabs" id="reportMetricTabs"></div>
+      <div class="view-buttons">
+        <button type="button" class="btn btn-ghost btn-sm" id="zoomInBtn" title="放大">＋</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="zoomOutBtn" title="缩小">－</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="panLeftBtn" title="向左平移">←</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="panRightBtn" title="向右平移">→</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="resetViewBtn">全量</button>
+      </div>
+    </div>
+    <div class="chart-head">
+      <h3 id="chartTitle">播放量</h3>
+    </div>
+    <p class="view-hint" id="viewHint">滚轮缩放 · 按住拖动平移 · 双击复位</p>
+
+    <div class="report-chart-wrap">
+      <canvas id="reportChart"></canvas>
+    </div>
+    <div class="chart-legend" id="chartLegend"></div>
+
+    <section class="ratio-block">
+      <div class="ratio-head">
+        <h3>指标比值</h3>
+        <select class="select-inline" id="ratioA"></select>
+        <span class="ratio-div">÷</span>
+        <select class="select-inline" id="ratioB"></select>
+        <span class="ratio-stats" id="ratioStats"></span>
+      </div>
+      <div class="report-chart-wrap ratio-chart-wrap">
+        <canvas id="ratioChart"></canvas>
+      </div>
+    </section>
+
+    <div class="detail-tail" aria-hidden="true"></div>
+  </div>
+
+</section>
+
+<div class="modal-overlay" id="importDirsOverlay" hidden>
+  <div class="modal import-dirs-modal" role="dialog" aria-modal="true" aria-label="报告自动导入目录">
+    <h3 class="modal-title">报告自动导入目录</h3>
+    <p class="modal-desc">这些目录里的报告会被自动收录，无需手动导入。</p>
+    <ul class="import-dir-list" id="importDirList"></ul>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="addImportDirBtn">添加目录</button>
+      <button type="button" class="btn btn-primary" id="closeImportDirsBtn">完成</button>
+    </div>
+  </div>
+</div>
+
+<div class="picker-overlay" id="pickerOverlay" hidden>
+  <div class="picker" role="dialog" aria-modal="true" aria-label="选择要导入的报告">
+    <header class="picker-head">
+      <h3 id="pickerTitle">导入报告</h3>
+      <button type="button" class="picker-close" id="pickerCloseBtn" aria-label="关闭">×</button>
+    </header>
+
+    <div class="picker-path">
+      <button type="button" class="picker-nav" id="pickerUpBtn" title="上一级" aria-label="上一级">←</button>
+      <button type="button" class="picker-nav picker-nav-wide" id="pickerRootBtn" title="回到此电脑">此电脑</button>
+      <input type="text" class="picker-path-input" id="pickerPathInput" spellcheck="false"
+             autocomplete="off" aria-label="当前路径，可手动输入后回车跳转">
+    </div>
+
+    <div class="picker-shortcuts" id="pickerShortcuts" hidden></div>
+
+    <div class="picker-list-wrap">
+      <ul class="picker-list" id="pickerList"></ul>
+      <p class="report-empty-tip" id="pickerEmptyTip" hidden>这个目录下没有子目录或 JSON 文件</p>
+    </div>
+
+    <footer class="picker-foot">
+      <span class="picker-count" id="pickerCount">已选 0 项</span>
+      <div class="picker-actions">
+        <button type="button" class="btn btn-ghost btn-sm" id="pickerCancelBtn">取消</button>
+        <button type="button" class="btn btn-primary btn-sm" id="pickerConfirmBtn" disabled>选中</button>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<div class="modal-overlay" id="confirmOverlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmMessage">
+    <p class="modal-message" id="confirmMessage"></p>
+    <div class="modal-actions" id="confirmActions"></div>
+  </div>
+</div>
+
+<script src="/chart.js"></script>
+<script src="/app.js"></script>
+<script src="/filepicker.js"></script>
+<script src="/report-page.js"></script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+@startuml 整点对齐
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Microsoft YaHei"
+skinparam activity {
+  BackgroundColor #F8FAFC
+  BorderColor #94A3B8
+}
+
+start
+:输入：当前时刻 T、采样周期 P（秒）;
+:锚点间隔 A = (P >= 300) ? 1800s : 60s;
+:取不小于 T 的最近锚点 B\n（T 正好在锚点上时 B = T）;
+:gap = B - T;
+:steps = floor(gap / P);
+:首次采样时刻 T1 = B - steps * P;
+:以 T1 设置首次采样，之后按 P 递推;
+
+note right
+  T=10:20:15, P=10s
+  B=10:21:00, steps=4 -> T1=10:20:20
+  等 5 秒开始，第 4 个周期命中整分
+
+  T=10:20:15, P=45s
+  steps=1 -> T1=10:20:15（立即）
+  1 个周期后命中整分
+
+  T=10:20:15, P=75s
+  steps=0 -> T1=10:21:00
+  直接等到整点开始
+
+  T=10:20:15, P=300s（半小时级）
+  B=10:30:00, steps=1 -> T1=10:25:00
+end note
+
+if (P 能整除 A ？) then (是)
+  :每个采样点都落在锚点上;
+else (否)
+  :只有首个点对齐\n后续按周期自然偏移;
+endif
+stop
+@enduml
